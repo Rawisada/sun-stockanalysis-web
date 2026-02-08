@@ -1,0 +1,169 @@
+import Head from "next/head";
+import type { GetServerSideProps } from "next";
+import Navbar from "@/components/Navbar";
+import Stack from "@mui/material/Stack";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { fetchJson } from "@/lib/api";
+
+type HomeProps = {
+  accessToken: string;
+};
+
+type Stock = {
+  id: string;
+  symbol: string;
+  name: string;
+  sector: string;
+  exchange: string;
+  asset_type: string;
+  currency: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type StockResponse = {
+  status?: {
+    code?: string;
+    message?: string;
+  };
+  data?: Stock[];
+};
+
+const parseCookies = (cookieHeader: string | undefined) => {
+  const cookies: Record<string, string> = {};
+  if (!cookieHeader) {
+    return cookies;
+  }
+  cookieHeader.split(";").forEach((pair) => {
+    const [rawKey, ...rawValue] = pair.trim().split("=");
+    if (!rawKey) {
+      return;
+    }
+    cookies[rawKey] = decodeURIComponent(rawValue.join("="));
+  });
+  return cookies;
+};
+
+export const getServerSideProps: GetServerSideProps<HomeProps> = async (
+  context
+) => {
+  const cookies = parseCookies(context.req.headers.cookie);
+  const accessToken = cookies.access_token;
+
+  if (!accessToken) {
+    return {
+      redirect: {
+        destination: "/login",
+        permanent: false,
+      },
+    };
+  }
+
+  return {
+    props: {
+      accessToken,
+    },
+  };
+};
+
+const getAccessTokenFromCookie = () => {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const match = document.cookie.match(/(?:^|; )access_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+export default function HomePage() {
+  const [stocks, setStocks] = useState<Stock[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadStocks = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const accessToken = getAccessTokenFromCookie();
+        const data = await fetchJson<StockResponse>("/v1/stocks", {
+          method: "GET",
+          headers: accessToken
+            ? { Authorization: `Bearer ${accessToken}` }
+            : undefined,
+        });
+        if (isMounted) {
+          setStocks(data.data ?? []);
+        }
+      } catch (err) {
+        if (isMounted) {
+          const message = err instanceof Error ? err.message : "Load failed";
+          setError(message);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    loadStocks();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  return (
+    <>
+      <Head>
+        <title>Home</title>
+      </Head>
+      <Navbar />
+      <main style={{ padding: "24px" }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
+          Stocks
+        </Typography>
+        {isLoading ? <Typography>Loading...</Typography> : null}
+        {error ? <Typography color="error">{error}</Typography> : null}
+        {!isLoading && !error ? (
+          <Stack spacing={1.5}>
+            {stocks.map((stock) => (
+              <Stack
+                key={stock.id}
+                direction="row"
+                spacing={1}
+                alignItems="center"
+              >
+                <Typography sx={{ minWidth: 80, fontWeight: 600 }}>
+                  {stock.symbol}
+                </Typography>
+                <Button
+                  component={Link}
+                  href={`/detail/daily/${stock.symbol}`}
+                  variant="outlined"
+                  size="small"
+                  sx={{ textTransform: "none" }}
+                >
+                  Daily
+                </Button>
+                <Button
+                  component={Link}
+                  href={`/detail/overall/${stock.symbol}`}
+                  variant="outlined"
+                  size="small"
+                  sx={{ textTransform: "none" }}
+                >
+                  Overall
+                </Button>
+              </Stack>
+            ))}
+          </Stack>
+        ) : null}
+      </main>
+    </>
+  );
+}
