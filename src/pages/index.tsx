@@ -159,6 +159,15 @@ export default function HomePage() {
                 >
                   Overall
                 </Button>
+                <Button
+                  component={Link}
+                  href={`/detail/news/${stock.symbol}`}
+                  variant="outlined"
+                  size="small"
+                  sx={{ textTransform: "none" }}
+                >
+                  News
+                </Button>
               </Stack>
             ))}
           </Stack>
