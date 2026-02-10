@@ -1,15 +1,14 @@
 import Head from "next/head";
 import Navbar from "@/components/Navbar";
 import Typography from "@mui/material/Typography";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchJson } from "@/lib/api";
 import Stack from "@mui/material/Stack";
 import { LineChart } from "@mui/x-charts/LineChart";
 import IconButton from "@mui/material/IconButton";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useRouter } from "next/router";
-import Alert from "@mui/material/Alert";
-import AlertTitle from "@mui/material/AlertTitle";
+import Box from "@mui/material/Box";
 
 type StockQuote = {
   id: string;
@@ -41,6 +40,36 @@ const parseDateTime = (value: string) => {
   return new Date(normalized);
 };
 
+const isActiveWindow = (date: Date) => {
+  const hour = date.getHours();
+  return hour >= 20 || hour < 4;
+};
+
+const msUntilNextWindowStart = (now: Date) => {
+  const next = new Date(now);
+  if (now.getHours() < 20) {
+    next.setHours(20, 0, 0, 0);
+  } else {
+    next.setDate(now.getDate() + 1);
+    next.setHours(20, 0, 0, 0);
+  }
+  return next.getTime() - now.getTime();
+};
+
+type AlertPayload = {
+  message?: string;
+  event?: {
+    id?: string;
+    symbol?: string;
+    trend_ema_20?: number;
+    trend_tanh_ema?: number;
+    score_ema?: number;
+    score_p_cross_ema?: number;
+    created_at?: string;
+  };
+  [key: string]: unknown;
+};
+
 export default function StockDetailDailyPage() {
   const router = useRouter();
   const symbol = Array.isArray(router.query.symbol)
@@ -49,26 +78,59 @@ export default function StockDetailDailyPage() {
   const [quotes, setQuotes] = useState<StockQuote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [alerts, setAlerts] = useState<string[]>([]);
+  const [alerts, setAlerts] = useState<AlertPayload[]>([]);
+  const chartScrollRef = useRef<HTMLDivElement | null>(null);
+  const hasInitialScroll = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const ws = new WebSocket("ws://localhost:8080/api/alerts/ws");
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let isActive = true;
+    let attempts = 0;
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        const text =
-          typeof data === "string" ? data : JSON.stringify(data, null, 2);
-        setAlerts((prev) => [text, ...prev].slice(0, 5));
-      } catch {
-        setAlerts((prev) => [String(event.data), ...prev].slice(0, 5));
-      }
+    const connect = () => {
+      if (!isActive) return;
+
+      ws = new WebSocket("ws://localhost:8080/api/alerts/ws");
+
+      ws.onopen = () => {
+        attempts = 0;
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as AlertPayload | string;
+          if (typeof data === "string") {
+            setAlerts((prev) => [{ message: data }, ...prev].slice(0, 5));
+          } else {
+            setAlerts((prev) => [data, ...prev].slice(0, 5));
+          }
+        } catch {
+          setAlerts((prev) => [
+            { message: String(event.data) },
+            ...prev,
+          ].slice(0, 5));
+        }
+      };
+
+      ws.onclose = () => {
+        if (!isActive) return;
+        const delay = Math.min(30000, 1000 * 2 ** attempts);
+        attempts += 1;
+        reconnectTimer = setTimeout(connect, delay);
+      };
     };
 
+    connect();
+
     return () => {
-      ws.close();
+      isActive = false;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+      }
+      ws?.close();
     };
   }, []);
 
@@ -103,7 +165,12 @@ export default function StockDetailDailyPage() {
         }
       }
 
-      timer = setTimeout(loadQuotes, 60000);
+      const now = new Date();
+      if (isActiveWindow(now)) {
+        timer = setTimeout(loadQuotes, 60000);
+      } else {
+        timer = setTimeout(loadQuotes, msUntilNextWindowStart(now));
+      }
     };
 
     loadQuotes();
@@ -124,11 +191,44 @@ export default function StockDetailDailyPage() {
 
     return sorted.map((quote) => ({
       time: parseDateTime(quote.created_at),
+      timeLabel: quote.created_at,
       price: quote.price_current,
       ema20: quote.ema_20,
       ema100: quote.ema_100,
+      changePercent: quote.change_percent,
+      changePrice: quote.change_price,
     }));
   }, [quotes]);
+
+  const xAxisLabelMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    let lastDate = "";
+    chartData.forEach((item) => {
+      const [datePart, timePart] = item.timeLabel.split(" ");
+      const timeOnly = timePart?.slice(0, 5) ?? "";
+      if (datePart && timeOnly) {
+        if (datePart !== lastDate) {
+          map[item.timeLabel] = `${datePart}\n${timeOnly}`;
+          lastDate = datePart;
+        } else {
+          map[item.timeLabel] = timeOnly;
+        }
+      } else {
+        map[item.timeLabel] = item.timeLabel;
+      }
+    });
+    return map;
+  }, [chartData]);
+
+  useEffect(() => {
+    const container = chartScrollRef.current;
+    if (!container) return;
+    if (!hasInitialScroll.current) {
+      hasInitialScroll.current = true;
+      return;
+    }
+    container.scrollLeft = container.scrollWidth;
+  }, [chartData.length]);
 
   const yTicks = useMemo(() => {
     if (chartData.length === 0) return [];
@@ -167,21 +267,72 @@ export default function StockDetailDailyPage() {
               Daily Detail
             </Typography>
           </Stack>
-          <Typography>Symbol: {symbol ?? "-"}</Typography>
-          {alerts.length > 0 ? (
-            <Alert severity="warning">
-              <AlertTitle>Alerts</AlertTitle>
-              {alerts.map((item, index) => (
-                <Typography
-                  key={`${item}-${index}`}
-                  component="div"
-                  sx={{ fontFamily: "monospace", fontSize: 12 }}
-                >
-                  {item}
+          <Stack
+            direction="row"
+            spacing={3}
+            alignItems="flex-start"
+            sx={{ width: "100%", justifyContent: "space-between" }}
+          >
+            <Stack spacing={1} sx={{ flex: 1 }}>
+              <Typography>Symbol: {symbol ?? "-"}</Typography>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Typography variant="body2">
+                  Latest Change Percent:{" "}
+                  <strong>
+                    {chartData.length > 0
+                      ? `${chartData[chartData.length - 1].changePercent.toFixed(
+                          2
+                        )}%`
+                      : "-"}
+                  </strong>
                 </Typography>
-              ))}
-            </Alert>
-          ) : null}
+                <Typography variant="body2">
+                  Latest Change Price:{" "}
+                  <strong>
+                    {chartData.length > 0
+                      ? `${chartData[chartData.length - 1].changePrice} USD`
+                      : "-"}
+                  </strong>
+                </Typography>
+              </Stack>
+            </Stack>
+            <Box
+              sx={{
+                minWidth: 260,
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 1,
+                padding: 1.5,
+                bgcolor: "background.paper",
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {alerts[0]?.message ?? "Stable"}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  mt: 0.5,
+                  color:
+                    alerts[0]?.event?.score_ema != null
+                      ? alerts[0].event.score_ema > 0
+                        ? "success.main"
+                        : alerts[0].event.score_ema < 0
+                        ? "error.main"
+                        : "text.primary"
+                      : "text.primary",
+                }}
+              >
+                score ema: {alerts[0]?.event?.score_ema ?? "-"} (
+                {alerts[0]?.event?.trend_ema_20 ?? "-"},{" "}
+                {alerts[0]?.event?.trend_tanh_ema ?? "-"})
+              </Typography>
+              <Typography variant="body2">
+                score price cross ema:{" "}
+                {alerts[0]?.event?.score_p_cross_ema ?? "-"}
+              </Typography>
+            </Box>
+          </Stack>
           {isLoading ? <Typography>Loading...</Typography> : null}
           {error ? <Typography color="error">{error}</Typography> : null}
           {!isLoading && !error && chartData.length > 0 ? (
@@ -192,7 +343,9 @@ export default function StockDetailDailyPage() {
                   display: "flex",
                   flexDirection: "column",
                   justifyContent: "space-between",
-                  padding: "8px 0 28px",
+                  height: "330px",
+                  padding: "0",
+                  boxSizing: "border-box",
                   color: "#4b5563",
                   fontSize: "12px",
                 }}
@@ -201,10 +354,13 @@ export default function StockDetailDailyPage() {
                   <div key={tick}>{tick.toFixed(2)}</div>
                 ))}
               </div>
-              <div style={{ width: "100%", overflowX: "auto" }}>
+              <div
+                ref={chartScrollRef}
+                style={{ width: "100%", overflowX: "auto" }}
+              >
                 <LineChart
                   height={360}
-                  width={Math.max(800, chartData.length * 14)}
+                  width={Math.max(1200, chartData.length * 18)}
                   series={[
                     {
                       data: chartData.map((item) => item.price),
@@ -227,15 +383,13 @@ export default function StockDetailDailyPage() {
                   ]}
                   xAxis={[
                     {
-                      data: chartData.map((item) => item.time as Date),
-                      scaleType: "time",
+                      data: chartData.map((item) => item.timeLabel),
+                      scaleType: "band",
                       label: "Time (minute)",
-                      valueFormatter: (value: Date) =>
-                        value.toLocaleTimeString("th-TH", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }),
-                      tickInterval: "minute",
+                      valueFormatter: (value) => {
+                        if (typeof value !== "string") return String(value);
+                        return xAxisLabelMap[value] ?? value;
+                      },
                     },
                   ]}
                   yAxis={[
