@@ -17,6 +17,7 @@ type RefreshResponse = {
 
 const apiBaseUrl =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080/api";
+const refreshTokenMaxAgeSeconds = 60 * 60 * 24 * 30;
 
 const createCorrelationId = () => {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -87,7 +88,7 @@ const refreshAccessToken = async () => {
         setCookie("access_token", accessToken, data.data?.expires_in);
       }
       if (newRefreshToken) {
-        setCookie("refresh_token", newRefreshToken);
+        setCookie("refresh_token", newRefreshToken, refreshTokenMaxAgeSeconds);
       }
 
       return data;
@@ -127,7 +128,7 @@ export const fetchJson = async <T>(
     headers,
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 4001) {
     const refreshed = await refreshAccessToken();
     if (refreshed?.data?.access_token) {
       const retryHeaders = {

@@ -18,6 +18,7 @@ export default function Navbar() {
 
   const handleLogout = async () => {
     document.cookie = "access_token=; Path=/; Max-Age=0; SameSite=Lax";
+    document.cookie = "refresh_token=; Path=/; Max-Age=0; SameSite=Lax";
     await router.push("/login");
   };
 

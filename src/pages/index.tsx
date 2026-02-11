@@ -8,10 +8,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/api";
 
-type HomeProps = {
-  accessToken: string;
-};
-
 type Stock = {
   id: string;
   symbol: string;
@@ -48,13 +44,14 @@ const parseCookies = (cookieHeader: string | undefined) => {
   return cookies;
 };
 
-export const getServerSideProps: GetServerSideProps<HomeProps> = async (
+export const getServerSideProps: GetServerSideProps = async (
   context
 ) => {
   const cookies = parseCookies(context.req.headers.cookie);
   const accessToken = cookies.access_token;
+  const refreshToken = cookies.refresh_token;
 
-  if (!accessToken) {
+  if (!accessToken && !refreshToken) {
     return {
       redirect: {
         destination: "/login",
@@ -64,9 +61,7 @@ export const getServerSideProps: GetServerSideProps<HomeProps> = async (
   }
 
   return {
-    props: {
-      accessToken,
-    },
+    props: {},
   };
 };
 

@@ -19,6 +19,7 @@ type LoginResponse = {
 
 
 export default function LoginPage() {
+  const refreshTokenMaxAgeSeconds = 60 * 60 * 24 * 30;
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,7 +50,7 @@ export default function LoginPage() {
 
       setCookie("access_token", accessToken, data.data?.expires_in);
       if (refreshToken) {
-        setCookie("refresh_token", refreshToken);
+        setCookie("refresh_token", refreshToken, refreshTokenMaxAgeSeconds);
       }
       setSuccess("Login successful. Tokens saved to cookie.");
       setPassword("");

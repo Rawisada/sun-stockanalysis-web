@@ -33,6 +33,15 @@ type StockQuoteResponse = {
   data?: StockQuote[];
 };
 
+const scoreEmaColor = (score?: number | null) => {
+  if (score == null) return "text.primary";
+  if (score >= 3) return "success.dark";
+  if (score >= 1) return "success.light";
+  if (score <= -3) return "error.dark";
+  if (score <= -1) return "error.light";
+  return "text.primary";
+}; 
+
 const parseDateTime = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -294,6 +303,14 @@ export default function StockDetailDailyPage() {
                       : "-"}
                   </strong>
                 </Typography>
+                <Typography variant="body2">
+                  Price Current:{" "}
+                  <strong>
+                    {chartData.length > 0
+                      ? `${chartData[chartData.length - 1].price} USD`
+                      : "-"}
+                  </strong>
+                </Typography>
               </Stack>
             </Stack>
             <Box
@@ -313,16 +330,9 @@ export default function StockDetailDailyPage() {
                 variant="body2"
                 sx={{
                   mt: 0.5,
-                  color:
-                    alerts[0]?.event?.score_ema != null
-                      ? alerts[0].event.score_ema > 0
-                        ? "success.main"
-                        : alerts[0].event.score_ema < 0
-                        ? "error.main"
-                        : "text.primary"
-                      : "text.primary",
+                  color: scoreEmaColor(alerts[0]?.event?.score_ema),
                 }}
-              >
+              > 
                 score ema: {alerts[0]?.event?.score_ema ?? "-"} (
                 {alerts[0]?.event?.trend_ema_20 ?? "-"},{" "}
                 {alerts[0]?.event?.trend_tanh_ema ?? "-"})
