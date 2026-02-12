@@ -33,6 +33,11 @@ type StockQuoteResponse = {
   data?: StockQuote[];
 };
 
+type StockQuoteStreamPayload = {
+  data?: StockQuote | null;
+  quote?: StockQuote | null;
+};
+
 const scoreEmaColor = (score?: number | null) => {
   if (score == null) return "text.primary";
   if (score >= 3) return "success.dark";
@@ -49,20 +54,38 @@ const parseDateTime = (value: string) => {
   return new Date(normalized);
 };
 
-const isActiveWindow = (date: Date) => {
-  const hour = date.getHours();
-  return hour >= 20 || hour < 4;
+// const quoteStreamBaseUrl = "ws://localhost:8080/api/stock-quotes/ws";
+const fallbackPollIntervalMs = 5 * 60 * 1000;
+
+const isStockQuote = (value: unknown): value is StockQuote => {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const quote = value as Partial<StockQuote>;
+  return Boolean(
+    quote.symbol &&
+      quote.created_at &&
+      typeof quote.price_current === "number" &&
+      typeof quote.ema_20 === "number" &&
+      typeof quote.ema_100 === "number"
+  );
 };
 
-const msUntilNextWindowStart = (now: Date) => {
-  const next = new Date(now);
-  if (now.getHours() < 20) {
-    next.setHours(20, 0, 0, 0);
-  } else {
-    next.setDate(now.getDate() + 1);
-    next.setHours(20, 0, 0, 0);
+const parseQuoteStreamPayload = (raw: unknown) => {
+  if (isStockQuote(raw)) {
+    return raw;
   }
-  return next.getTime() - now.getTime();
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const payload = raw as StockQuoteStreamPayload;
+  if (isStockQuote(payload.data)) {
+    return payload.data;
+  }
+  if (isStockQuote(payload.quote)) {
+    return payload.quote;
+  }
+  return null;
 };
 
 type AlertPayload = {
@@ -147,11 +170,16 @@ export default function StockDetailDailyPage() {
     if (!symbol) return;
 
     let isMounted = true;
-    let timer: NodeJS.Timeout | null = null;
+    let ws: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let fallbackPollTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
 
-    const loadQuotes = async () => {
-      setIsLoading(true);
-      setError(null);
+    const loadQuotes = async (isFallback = false) => {
+      if (!isFallback) {
+        setIsLoading(true);
+        setError(null);
+      }
       try {
         const query = new URLSearchParams({ symbol }).toString();
         const data = await fetchJson<StockQuoteResponse>(
@@ -164,30 +192,104 @@ export default function StockDetailDailyPage() {
           setQuotes(data.data ?? []);
         }
       } catch (err) {
-        if (isMounted) {
+        if (isMounted && !isFallback) {
           const message = err instanceof Error ? err.message : "Load failed";
           setError(message);
         }
       } finally {
-        if (isMounted) {
+        if (isMounted && !isFallback) {
           setIsLoading(false);
         }
       }
+    };
 
-      const now = new Date();
-      if (isActiveWindow(now)) {
-        timer = setTimeout(loadQuotes, 60000);
-      } else {
-        timer = setTimeout(loadQuotes, msUntilNextWindowStart(now));
+    const stopFallbackPolling = () => {
+      if (fallbackPollTimer) {
+        clearTimeout(fallbackPollTimer);
+        fallbackPollTimer = null;
       }
     };
 
-    loadQuotes();
+    const startFallbackPolling = () => {
+      if (!isMounted || fallbackPollTimer) {
+        return;
+      }
+
+      const poll = async () => {
+        if (!isMounted) {
+          return;
+        }
+        await loadQuotes(true);
+        if (!isMounted || ws?.readyState === WebSocket.OPEN) {
+          fallbackPollTimer = null;
+          return;
+        }
+        fallbackPollTimer = setTimeout(poll, fallbackPollIntervalMs);
+      };
+
+      fallbackPollTimer = setTimeout(poll, fallbackPollIntervalMs);
+    };
+
+    const connectQuoteStream = () => {
+      if (!isMounted) return;
+
+      ws = new WebSocket("ws://localhost:8080/api/stock-quotes/ws");
+
+      ws.onopen = () => {
+        attempts = 0;
+        stopFallbackPolling();
+      };
+
+      ws.onmessage = (event) => {
+          console.log("quote ws raw:", event.data);
+        try {
+          const parsed = JSON.parse(event.data) as unknown;
+          const nextQuote = parseQuoteStreamPayload(parsed);
+          if (!nextQuote || nextQuote.symbol !== symbol) {
+            return;
+          }
+
+          setQuotes((prev) => {
+            const existingIndex = prev.findIndex(
+              (item) =>
+                item.id === nextQuote.id || item.created_at === nextQuote.created_at
+            );
+            if (existingIndex >= 0) {
+              const next = [...prev];
+              next[existingIndex] = nextQuote;
+              return next;
+            }
+            return [...prev, nextQuote].slice(-1000);
+          });
+        } catch {
+          return;
+        }
+      };
+
+      ws.onclose = () => {
+        if (!isMounted) {
+          return;
+        }
+        startFallbackPolling();
+        const delay = Math.min(30000, 1000 * 2 ** attempts);
+        attempts += 1;
+        reconnectTimer = setTimeout(connectQuoteStream, delay);
+      };
+    };
+
+    void loadQuotes().then(() => {
+      if (isMounted) {
+        connectQuoteStream();
+      }
+    });
+
     return () => {
       isMounted = false;
-      if (timer) {
-        clearTimeout(timer);
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
       }
+      stopFallbackPolling();
+      ws?.close();
     };
   }, [symbol]);
 
@@ -323,7 +425,7 @@ export default function StockDetailDailyPage() {
                 bgcolor: "background.paper",
               }}
             >
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: scoreEmaColor(alerts[0]?.event?.score_ema),}}>
                 {alerts[0]?.message ?? "Stable"}
               </Typography>
               <Typography
@@ -346,72 +448,75 @@ export default function StockDetailDailyPage() {
           {isLoading ? <Typography>Loading...</Typography> : null}
           {error ? <Typography color="error">{error}</Typography> : null}
           {!isLoading && !error && chartData.length > 0 ? (
-            <div style={{ display: "flex", gap: "12px" }}>
-              <div
-                style={{
-                  width: "64px",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  height: "330px",
-                  padding: "0",
-                  boxSizing: "border-box",
-                  color: "#4b5563",
-                  fontSize: "12px",
-                }}
-              >
-                {yTicks.map((tick) => (
-                  <div key={tick}>{tick.toFixed(2)}</div>
-                ))}
-              </div>
-              <div
-                ref={chartScrollRef}
-                style={{ width: "100%", overflowX: "auto" }}
-              >
-                <LineChart
-                  height={360}
-                  width={Math.max(1200, chartData.length * 18)}
-                  series={[
-                    {
-                      data: chartData.map((item) => item.price),
-                      label: "Price",
-                      color: "#2563eb",
-                      showMark: false,
-                    },
-                    {
-                      data: chartData.map((item) => item.ema20),
-                      label: "EMA 20",
-                      color: "#f59e0b",
-                      showMark: false,
-                    },
-                    {
-                      data: chartData.map((item) => item.ema100),
-                      label: "EMA 100",
-                      color: "#16a34a",
-                      showMark: false,
-                    },
-                  ]}
-                  xAxis={[
-                    {
-                      data: chartData.map((item) => item.timeLabel),
-                      scaleType: "band",
-                      label: "Time (minute)",
-                      valueFormatter: (value) => {
-                        if (typeof value !== "string") return String(value);
-                        return xAxisLabelMap[value] ?? value;
+            <Stack spacing={1}>
+              <div style={{ display: "flex", gap: "12px" }}>
+                <div
+                  style={{
+                    width: "64px",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    height: "330px",
+                    padding: "0",
+                    boxSizing: "border-box",
+                    color: "#4b5563",
+                    fontSize: "12px",
+                  }}
+                >
+                  {yTicks.map((tick) => (
+                    <div key={tick}>{tick.toFixed(2)}</div>
+                  ))}
+                </div>
+                <div
+                  ref={chartScrollRef}
+                  style={{ width: "100%", overflowX: "auto" }}
+                >
+                  <LineChart
+                    height={360}
+                    width={Math.max(1200, chartData.length * 18)}
+                    margin={{ right: 24 }}
+                    series={[
+                      {
+                        data: chartData.map((item) => item.price),
+                        label: "Price",
+                        color: "#2563eb",
+                        showMark: ({ index }) => index === chartData.length - 1,
                       },
-                    },
-                  ]}
-                  yAxis={[
-                    {
-                      tickLabelStyle: { display: "none" },
-                      disableLine: true,
-                      disableTicks: true,
-                    },
-                  ]}
-                />
+                      {
+                        data: chartData.map((item) => item.ema20),
+                        label: "EMA 20",
+                        color: "#f59e0b",
+                        showMark: ({ index }) => index === chartData.length - 1,
+                      },
+                      {
+                        data: chartData.map((item) => item.ema100),
+                        label: "EMA 100",
+                        color: "#16a34a",
+                        showMark: ({ index }) => index === chartData.length - 1,
+                      },
+                    ]}
+                    xAxis={[
+                      {
+                        data: chartData.map((item) => item.timeLabel),
+                        scaleType: "band",
+                        label: "Time (minute)",
+                        valueFormatter: (value) => {
+                          if (typeof value !== "string") return String(value);
+                          return xAxisLabelMap[value] ?? value;
+                        },
+                      },
+                    ]}
+                    yAxis={[
+                      {
+                        tickLabelStyle: { display: "none" },
+                        disableLine: true,
+                        disableTicks: true,
+                      },
+                    ]}
+                  />
+                </div>
               </div>
-            </div>
+            </Stack>
           ) : null}
           {!isLoading && !error && chartData.length === 0 ? (
             <Typography>No data available.</Typography>
