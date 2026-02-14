@@ -54,7 +54,7 @@ const parseDateTime = (value: string) => {
   return new Date(normalized);
 };
 
-// const quoteStreamBaseUrl = "ws://localhost:8080/api/stock-quotes/ws";
+const wsApiBaseUrl = (process.env.NEXT_PUBLIC_WS_API_BASE ?? "ws://localhost:8080/api").replace(/\/$/, "");
 const fallbackPollIntervalMs = 5 * 60 * 1000;
 
 const isStockQuote = (value: unknown): value is StockQuote => {
@@ -125,7 +125,7 @@ export default function StockDetailDailyPage() {
     const connect = () => {
       if (!isActive) return;
 
-      ws = new WebSocket("ws://localhost:8080/api/alerts/ws");
+      ws = new WebSocket(`${wsApiBaseUrl}/alerts/ws`);
 
       ws.onopen = () => {
         attempts = 0;
@@ -233,7 +233,7 @@ export default function StockDetailDailyPage() {
     const connectQuoteStream = () => {
       if (!isMounted) return;
 
-      ws = new WebSocket("ws://localhost:8080/api/stock-quotes/ws");
+      ws = new WebSocket(`${wsApiBaseUrl}/stock-quotes/ws`);
 
       ws.onopen = () => {
         attempts = 0;
@@ -526,3 +526,6 @@ export default function StockDetailDailyPage() {
     </>
   );
 }
+
+
+
