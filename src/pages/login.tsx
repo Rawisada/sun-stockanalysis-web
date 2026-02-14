@@ -52,6 +52,9 @@ export default function LoginPage() {
       if (refreshToken) {
         setCookie("refresh_token", refreshToken, refreshTokenMaxAgeSeconds);
       }
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("show_login_success_popup", "1");
+      }
       setSuccess("Login successful. Tokens saved to cookie.");
       setPassword("");
       await router.push("/");

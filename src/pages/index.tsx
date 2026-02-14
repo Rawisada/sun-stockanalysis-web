@@ -4,6 +4,10 @@ import Navbar from "@/components/Navbar";
 import Stack from "@mui/material/Stack";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { fetchJson } from "@/lib/api";
@@ -74,9 +78,25 @@ const getAccessTokenFromCookie = () => {
 };
 
 export default function HomePage() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [stocks, setStocks] = useState<Stock[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showLoginSuccess, setShowLoginSuccess] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const shouldShow = sessionStorage.getItem("show_login_success_popup") === "1";
+    if (shouldShow && isMobile) {
+      setShowLoginSuccess(true);
+    }
+    if (shouldShow) {
+      sessionStorage.removeItem("show_login_success_popup");
+    }
+  }, [isMobile]);
 
   useEffect(() => {
     let isMounted = true;
@@ -168,6 +188,21 @@ export default function HomePage() {
           </Stack>
         ) : null}
       </main>
+      <Snackbar
+        open={showLoginSuccess}
+        autoHideDuration={2500}
+        onClose={() => setShowLoginSuccess(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setShowLoginSuccess(false)}
+          severity="success"
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          Login successful
+        </Alert>
+      </Snackbar>
     </>
   );
 }
