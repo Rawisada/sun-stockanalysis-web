@@ -1,5 +1,6 @@
 const vapidPublicKeyApiPath = "/api/v1/push/vapid-public-key";
 const subscriptionApiPath = "/api/v1/push/subscriptions";
+const pushDeviceIdStorageKey = "push_device_id";
 
 const urlBase64ToUint8Array = (base64String: string) => {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -55,6 +56,51 @@ type VapidPublicKeyResponse = {
   };
 };
 
+type ApiErrorResponse = {
+  status?: {
+    code?: string;
+    message?: string;
+    remark?: string;
+  };
+};
+
+const getOrCreateDeviceId = () => {
+  if (typeof window === "undefined") {
+    throw new Error("Window is not available.");
+  }
+
+  const existing = window.localStorage.getItem(pushDeviceIdStorageKey);
+  if (existing) {
+    return existing;
+  }
+
+  const next =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `dev_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+
+  window.localStorage.setItem(pushDeviceIdStorageKey, next);
+  return next;
+};
+
+const parseApiErrorMessage = async (response: Response) => {
+  const payload = (await response.json().catch(() => ({}))) as ApiErrorResponse;
+  const code = payload.status?.code;
+  const message = payload.status?.message;
+  const remark = payload.status?.remark;
+
+  if (remark) {
+    return remark;
+  }
+  if (message && code) {
+    return `${message} (code: ${code})`;
+  }
+  if (message) {
+    return message;
+  }
+  return "Request failed.";
+};
+
 const getVapidPublicKey = async () => {
   const response = await fetch(vapidPublicKeyApiPath, {
     method: "GET",
@@ -65,7 +111,13 @@ const getVapidPublicKey = async () => {
 
   const payload = (await response.json().catch(() => ({}))) as VapidPublicKeyResponse;
   if (!response.ok) {
-    throw new Error("Failed to load VAPID public key from backend.");
+    const errorPayload = payload as unknown as ApiErrorResponse;
+    const code = errorPayload.status?.code;
+    const message = errorPayload.status?.message;
+    const remark = errorPayload.status?.remark;
+    throw new Error(
+      remark || (message && code ? `${message} (code: ${code})` : message || "Request failed.")
+    );
   }
 
   const key =
@@ -86,6 +138,18 @@ export const registerServiceWorker = async () => {
     return null;
   }
   return navigator.serviceWorker.register("/sw.js");
+};
+
+export const hasPushSubscription = async () => {
+  if (!isPushSupported()) {
+    return false;
+  }
+  const registration = await registerServiceWorker();
+  if (!registration) {
+    return false;
+  }
+  const subscription = await registration.pushManager.getSubscription();
+  return Boolean(subscription);
 };
 
 export const subscribeToPushNotifications = async () => {
@@ -116,6 +180,7 @@ export const subscribeToPushNotifications = async () => {
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     }));
+  const deviceId = getOrCreateDeviceId();
 
   const response = await fetch(subscriptionApiPath, {
     method: "POST",
@@ -124,15 +189,53 @@ export const subscribeToPushNotifications = async () => {
       ...createAuthHeaders(),
     },
     body: JSON.stringify({
+      device_id: deviceId,
       subscription,
       userAgent: navigator.userAgent,
     }),
   });
 
   if (!response.ok) {
-    const message = await response.text().catch(() => "");
-    throw new Error(message || "Failed to save subscription.");
+    throw new Error(await parseApiErrorMessage(response));
   }
 
   return subscription;
+};
+
+export const unsubscribeFromPushNotifications = async () => {
+  if (!isPushSupported()) {
+    throw new Error("This browser does not support push notifications.");
+  }
+
+  const registration = await registerServiceWorker();
+  if (!registration) {
+    throw new Error("Failed to register service worker.");
+  }
+
+  const subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    return;
+  }
+
+  const deviceId = getOrCreateDeviceId();
+  const unsubscribed = await subscription.unsubscribe();
+  if (!unsubscribed) {
+    throw new Error("Failed to unsubscribe from push notifications.");
+  }
+
+  const response = await fetch(subscriptionApiPath, {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json",
+      ...createAuthHeaders(),
+    },
+    body: JSON.stringify({
+      device_id: deviceId,
+      endpoint: subscription.endpoint,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await parseApiErrorMessage(response));
+  }
 };

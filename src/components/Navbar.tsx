@@ -6,8 +6,14 @@ import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { clearCookie } from "@/lib/api";
-import { useState } from "react";
-import { subscribeToPushNotifications } from "@/lib/push";
+import { useEffect, useState, type ChangeEvent } from "react";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Switch from "@mui/material/Switch";
+import {
+  hasPushSubscription,
+  subscribeToPushNotifications,
+  unsubscribeFromPushNotifications,
+} from "@/lib/push";
 
 type NavItem = {
   label: string;
@@ -18,8 +24,29 @@ const navItems: NavItem[] = [{ label: "Home", href: "/" }];
 
 export default function Navbar() {
   const router = useRouter();
-  const [isSubscribingPush, setIsSubscribingPush] = useState(false);
+  const [isUpdatingPush, setIsUpdatingPush] = useState(false);
+  const [isPushEnabled, setIsPushEnabled] = useState(false);
   const [pushStatus, setPushStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadPushStatus = async () => {
+      try {
+        const enabled = await hasPushSubscription();
+        if (isMounted) {
+          setIsPushEnabled(enabled);
+        }
+      } catch {
+        if (isMounted) {
+          setIsPushEnabled(false);
+        }
+      }
+    };
+    void loadPushStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleLogout = async () => {
     clearCookie("access_token");
@@ -27,18 +54,27 @@ export default function Navbar() {
     await router.push("/login");
   };
 
-  const handleEnablePush = async () => {
-    setIsSubscribingPush(true);
+  const handleTogglePush = async (event: ChangeEvent<HTMLInputElement>) => {
+    const nextEnabled = event.target.checked;
+    setIsUpdatingPush(true);
     setPushStatus(null);
     try {
-      await subscribeToPushNotifications();
-      setPushStatus("Push notifications enabled");
+      if (nextEnabled) {
+        await subscribeToPushNotifications();
+        setIsPushEnabled(true);
+        setPushStatus("Push notifications enabled");
+      } else {
+        await unsubscribeFromPushNotifications();
+        setIsPushEnabled(false);
+        setPushStatus("Push notifications disabled");
+      }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Failed to enable push notifications";
+        error instanceof Error ? error.message : "Failed to update push notifications";
       setPushStatus(message);
+      setIsPushEnabled(!nextEnabled);
     } finally {
-      setIsSubscribingPush(false);
+      setIsUpdatingPush(false);
     }
   };
 
@@ -53,14 +89,18 @@ export default function Navbar() {
           Sun Stock Analysis
         </Typography>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-          <Button
-            color="inherit"
-            onClick={handleEnablePush}
-            disabled={isSubscribingPush}
-            sx={{ textTransform: "none" }}
-          >
-            {isSubscribingPush ? "Enabling..." : "Enable Push"}
-          </Button>
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={isPushEnabled}
+                onChange={handleTogglePush}
+                disabled={isUpdatingPush}
+              />
+            }
+            label={isUpdatingPush ? "Updating..." : "Push"}
+            sx={{ mr: 0.5 }}
+          />
           {navItems.map((item) => (
             <Button
               key={item.href}
