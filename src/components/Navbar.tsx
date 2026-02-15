@@ -6,6 +6,8 @@ import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { clearCookie } from "@/lib/api";
+import { useState } from "react";
+import { subscribeToPushNotifications } from "@/lib/push";
 
 type NavItem = {
   label: string;
@@ -16,11 +18,28 @@ const navItems: NavItem[] = [{ label: "Home", href: "/" }];
 
 export default function Navbar() {
   const router = useRouter();
+  const [isSubscribingPush, setIsSubscribingPush] = useState(false);
+  const [pushStatus, setPushStatus] = useState<string | null>(null);
 
   const handleLogout = async () => {
     clearCookie("access_token");
     clearCookie("refresh_token");
     await router.push("/login");
+  };
+
+  const handleEnablePush = async () => {
+    setIsSubscribingPush(true);
+    setPushStatus(null);
+    try {
+      await subscribeToPushNotifications();
+      setPushStatus("Push notifications enabled");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to enable push notifications";
+      setPushStatus(message);
+    } finally {
+      setIsSubscribingPush(false);
+    }
   };
 
   return (
@@ -33,7 +52,15 @@ export default function Navbar() {
         >
           Sun Stock Analysis
         </Typography>
-        <Box sx={{ display: "flex", gap: 1 }}>
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+          <Button
+            color="inherit"
+            onClick={handleEnablePush}
+            disabled={isSubscribingPush}
+            sx={{ textTransform: "none" }}
+          >
+            {isSubscribingPush ? "Enabling..." : "Enable Push"}
+          </Button>
           {navItems.map((item) => (
             <Button
               key={item.href}
@@ -52,6 +79,11 @@ export default function Navbar() {
           >
             Logout
           </Button>
+          {pushStatus ? (
+            <Typography variant="caption" sx={{ color: "text.secondary", ml: 1 }}>
+              {pushStatus}
+            </Typography>
+          ) : null}
         </Box>
       </Toolbar>
     </AppBar>
