@@ -102,6 +102,14 @@ type AlertPayload = {
   [key: string]: unknown;
 };
 
+const isAlertForSymbol = (alert: AlertPayload, targetSymbol?: string) => {
+  const alertSymbol = alert.event?.symbol;
+  if (!targetSymbol || !alertSymbol) {
+    return false;
+  }
+  return alertSymbol.toUpperCase() === targetSymbol.toUpperCase();
+};
+
 export default function StockDetailDailyPage() {
   const router = useRouter();
   const symbol = Array.isArray(router.query.symbol)
@@ -134,16 +142,13 @@ export default function StockDetailDailyPage() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data) as AlertPayload | string;
-          if (typeof data === "string") {
-            setAlerts((prev) => [{ message: data }, ...prev].slice(0, 5));
-          } else {
-            setAlerts((prev) => [data, ...prev].slice(0, 5));
+          if (typeof data !== "string") {
+            if (isAlertForSymbol(data, symbol)) {
+              setAlerts((prev) => [data, ...prev].slice(0, 5));
+            }
           }
         } catch {
-          setAlerts((prev) => [
-            { message: String(event.data) },
-            ...prev,
-          ].slice(0, 5));
+          return;
         }
       };
 
@@ -164,7 +169,11 @@ export default function StockDetailDailyPage() {
       }
       ws?.close();
     };
-  }, []);
+  }, [symbol]);
+
+  const latestAlertForSymbol = useMemo(() => {
+    return alerts.find((alert) => isAlertForSymbol(alert, symbol));
+  }, [alerts, symbol]);
 
   useEffect(() => {
     if (!symbol) return;
@@ -425,23 +434,23 @@ export default function StockDetailDailyPage() {
                 bgcolor: "background.paper",
               }}
             >
-              <Typography variant="body2" sx={{ fontWeight: 700, color: scoreEmaColor(alerts[0]?.event?.score_ema),}}>
-                {alerts[0]?.message ?? "Stable"}
+              <Typography variant="body2" sx={{ fontWeight: 700, color: scoreEmaColor(latestAlertForSymbol?.event?.score_ema),}}>
+                {latestAlertForSymbol?.message ?? "Stable"}
               </Typography>
               <Typography
                 variant="body2"
                 sx={{
                   mt: 0.5,
-                  color: scoreEmaColor(alerts[0]?.event?.score_ema),
+                  color: scoreEmaColor(latestAlertForSymbol?.event?.score_ema),
                 }}
               > 
-                score ema: {alerts[0]?.event?.score_ema ?? "-"} (
-                {alerts[0]?.event?.trend_ema_20 ?? "-"},{" "}
-                {alerts[0]?.event?.trend_tanh_ema ?? "-"})
+                score ema: {latestAlertForSymbol?.event?.score_ema ?? "-"} (
+                {latestAlertForSymbol?.event?.trend_ema_20 ?? "-"},{" "}
+                {latestAlertForSymbol?.event?.trend_tanh_ema ?? "-"})
               </Typography>
               <Typography variant="body2">
                 score price cross ema:{" "}
-                {alerts[0]?.event?.score_p_cross_ema ?? "-"}
+                {latestAlertForSymbol?.event?.score_p_cross_ema ?? "-"}
               </Typography>
             </Box>
           </Stack>

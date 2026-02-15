@@ -5,6 +5,7 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { useRouter } from "next/router";
+import { clearCookie } from "@/lib/api";
 
 type NavItem = {
   label: string;
@@ -17,8 +18,8 @@ export default function Navbar() {
   const router = useRouter();
 
   const handleLogout = async () => {
-    document.cookie = "access_token=; Path=/; Max-Age=0; SameSite=Lax";
-    document.cookie = "refresh_token=; Path=/; Max-Age=0; SameSite=Lax";
+    clearCookie("access_token");
+    clearCookie("refresh_token");
     await router.push("/login");
   };
 

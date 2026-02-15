@@ -26,13 +26,25 @@ const createCorrelationId = () => {
   return `cid_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 };
 
+const isHttps = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.location.protocol === "https:";
+};
+
+const cookieAttributes = (maxAgeSeconds?: number) => {
+  const maxAge =
+    typeof maxAgeSeconds === "number" ? `; Max-Age=${maxAgeSeconds}` : "";
+  const secure = isHttps() ? "; Secure" : "";
+  return `Path=/${maxAge}; SameSite=Lax${secure}`;
+};
+
 const getCookie = (name: string) => {
   if (typeof document === "undefined") {
     return null;
   }
-  const match = document.cookie.match(
-    new RegExp(`(?:^|; )${name}=([^;]*)`)
-  );
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : null;
 };
 
@@ -45,15 +57,14 @@ export const setCookie = (
     return;
   }
   const encoded = encodeURIComponent(value);
-  const maxAge = maxAgeSeconds ? `; Max-Age=${maxAgeSeconds}` : "";
-  document.cookie = `${name}=${encoded}; Path=/${maxAge}; SameSite=Lax`;
+  document.cookie = `${name}=${encoded}; ${cookieAttributes(maxAgeSeconds)}`;
 };
 
-const clearCookie = (name: string) => {
+export const clearCookie = (name: string) => {
   if (typeof document === "undefined") {
     return;
   }
-  document.cookie = `${name}=; Path=/; Max-Age=0; SameSite=Lax`;
+  document.cookie = `${name}=; ${cookieAttributes(0)}`;
 };
 
 let refreshPromise: Promise<RefreshResponse | null> | null = null;
