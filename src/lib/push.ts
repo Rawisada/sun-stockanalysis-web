@@ -83,6 +83,35 @@ const getOrCreateDeviceId = () => {
   return next;
 };
 
+type PushSubscriptionPayload = {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+};
+
+const toPushSubscriptionPayload = (
+  subscription: PushSubscription
+): PushSubscriptionPayload => {
+  const raw = subscription.toJSON();
+  const endpoint = raw.endpoint;
+  const p256dh = raw.keys?.p256dh;
+  const auth = raw.keys?.auth;
+
+  if (!endpoint || !p256dh || !auth) {
+    throw new Error("Subscription payload is incomplete.");
+  }
+
+  return {
+    endpoint,
+    keys: {
+      p256dh,
+      auth,
+    },
+  };
+};
+
 const parseApiErrorMessage = async (response: Response) => {
   const payload = (await response.json().catch(() => ({}))) as ApiErrorResponse;
   const code = payload.status?.code;
@@ -190,7 +219,7 @@ export const subscribeToPushNotifications = async () => {
     },
     body: JSON.stringify({
       device_id: deviceId,
-      subscription,
+      subscription: toPushSubscriptionPayload(subscription),
       userAgent: navigator.userAgent,
     }),
   });
