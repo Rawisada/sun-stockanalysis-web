@@ -69,7 +69,7 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>Login</title>
+        <title>SunStock</title>
       </Head>
       <div className={styles.page}>
         <form className={styles.card} onSubmit={handleSubmit}>

@@ -47,8 +47,8 @@ self.addEventListener("push", (event) => {
 
   const options = {
     body,
-    icon: payload.icon || "/favicon.ico",
-    badge: payload.badge || "/favicon.ico",
+    icon: payload.icon || "/icons/icon-192.png",
+    badge: payload.badge || "/icons/icon-32.png",
     tag: payload && payload.event && payload.event.id ? payload.event.id : undefined,
     renotify: true,
     data: {
