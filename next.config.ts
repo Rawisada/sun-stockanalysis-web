@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const apiProxyBaseUrl = process.env.API_PROXY_BASE_URL || "http://localhost:8080";
+const apiProxyBaseUrl = process.env.API_PROXY_BASE_URL;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

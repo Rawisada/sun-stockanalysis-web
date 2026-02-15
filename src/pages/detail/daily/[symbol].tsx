@@ -33,6 +33,24 @@ type StockQuoteResponse = {
   data?: StockQuote[];
 };
 
+type StockDaily = {
+  id: string;
+  symbol: string;
+  price_high: number;
+  price_low: number;
+  price_open: number;
+  price_prev_close: number;
+  created_at: string;
+};
+
+type StockDailyResponse = {
+  status?: {
+    code?: string;
+    message?: string;
+  };
+  data?: StockDaily[];
+};
+
 type StockQuoteStreamPayload = {
   data?: StockQuote | null;
   quote?: StockQuote | null;
@@ -54,7 +72,7 @@ const parseDateTime = (value: string) => {
   return new Date(normalized);
 };
 
-const wsApiBaseUrl = (process.env.NEXT_PUBLIC_WS_API_BASE ?? "ws://localhost:8080/api").replace(/\/$/, "");
+const wsApiBaseUrl = process.env.NEXT_PUBLIC_WS_API_BASE
 const fallbackPollIntervalMs = 5 * 60 * 1000;
 
 const isStockQuote = (value: unknown): value is StockQuote => {
@@ -116,6 +134,7 @@ export default function StockDetailDailyPage() {
     ? router.query.symbol[0]
     : router.query.symbol;
   const [quotes, setQuotes] = useState<StockQuote[]>([]);
+  const [stockDaily, setStockDaily] = useState<StockDaily | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [alerts, setAlerts] = useState<AlertPayload[]>([]);
@@ -212,6 +231,25 @@ export default function StockDetailDailyPage() {
       }
     };
 
+    const loadStockDaily = async () => {
+      try {
+        const query = new URLSearchParams({ symbol }).toString();
+        const data = await fetchJson<StockDailyResponse>(
+          `/v1/stock-daily?${query}`,
+          {
+            method: "GET",
+          }
+        );
+        if (isMounted) {
+          setStockDaily(data.data?.[0] ?? null);
+        }
+      } catch {
+        if (isMounted) {
+          setStockDaily(null);
+        }
+      }
+    };
+
     const stopFallbackPolling = () => {
       if (fallbackPollTimer) {
         clearTimeout(fallbackPollTimer);
@@ -286,7 +324,7 @@ export default function StockDetailDailyPage() {
       };
     };
 
-    void loadQuotes().then(() => {
+    void Promise.all([loadQuotes(), loadStockDaily()]).then(() => {
       if (isMounted) {
         connectQuoteStream();
       }
@@ -420,6 +458,32 @@ export default function StockDetailDailyPage() {
                     {chartData.length > 0
                       ? `${chartData[chartData.length - 1].price} USD`
                       : "-"}
+                  </strong>
+                </Typography>
+              </Stack>
+              <Stack direction="row" spacing={2} alignItems="center">
+                <Typography variant="body2">
+                  High:{" "}
+                  <strong>
+                    {stockDaily ? `${stockDaily.price_high} USD` : "-"}
+                  </strong>
+                </Typography>
+                <Typography variant="body2">
+                  Low:{" "}
+                  <strong>
+                    {stockDaily ? `${stockDaily.price_low} USD` : "-"}
+                  </strong>
+                </Typography>
+                <Typography variant="body2">
+                  Open:{" "}
+                  <strong>
+                    {stockDaily ? `${stockDaily.price_open} USD` : "-"}
+                  </strong>
+                </Typography>
+                <Typography variant="body2">
+                  Prev Close:{" "}
+                  <strong>
+                    {stockDaily ? `${stockDaily.price_prev_close} USD` : "-"}
                   </strong>
                 </Typography>
               </Stack>
