@@ -23,9 +23,13 @@ self.addEventListener("push", (event) => {
   }
 
   const symbol =
-    payload && payload.event && typeof payload.event.symbol === "string"
-      ? payload.event.symbol
-      : "UNKNOWN";
+    payload &&
+    payload.event &&
+    typeof payload.event.symbol === "string" &&
+    payload.event.symbol.trim() &&
+    payload.event.symbol.toUpperCase() !== "UNKNOWN"
+      ? payload.event.symbol.trim()
+      : null;
   const message =
     payload && typeof payload.message === "string"
       ? payload.message
@@ -38,8 +42,9 @@ self.addEventListener("push", (event) => {
       : null;
 
   const title = payload.title || "Stock Alert";
-  const scoreText = scoreEma == null ? "-" : String(scoreEma);
-  const body = `[${symbol}] ${message} (score_ema: ${scoreText})`;
+  const bodyPrefix = symbol ? `[${symbol}] ` : "";
+  const scoreSuffix = scoreEma == null ? "" : ` (score_ema: ${scoreEma})`;
+  const body = `${bodyPrefix}${message}${scoreSuffix}`;
   const targetUrl =
     payload && payload.event && payload.event.symbol
       ? `/detail/daily/${payload.event.symbol}`
