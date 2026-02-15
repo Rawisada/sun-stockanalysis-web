@@ -1,12 +1,19 @@
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
+import MenuIcon from "@mui/icons-material/Menu";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { clearCookie } from "@/lib/api";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent, type MouseEvent } from "react";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import {
@@ -24,9 +31,12 @@ const navItems: NavItem[] = [{ label: "Home", href: "/" }];
 
 export default function Navbar() {
   const router = useRouter();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isUpdatingPush, setIsUpdatingPush] = useState(false);
   const [isPushEnabled, setIsPushEnabled] = useState(false);
-  const [pushStatus, setPushStatus] = useState<string | null>(null);
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
+  const isMenuOpen = Boolean(menuAnchorEl);
 
   useEffect(() => {
     let isMounted = true;
@@ -57,25 +67,42 @@ export default function Navbar() {
   const handleTogglePush = async (event: ChangeEvent<HTMLInputElement>) => {
     const nextEnabled = event.target.checked;
     setIsUpdatingPush(true);
-    setPushStatus(null);
     try {
       if (nextEnabled) {
         await subscribeToPushNotifications();
         setIsPushEnabled(true);
-        setPushStatus("Push notifications enabled");
+        alert("Push notifications enabled");
       } else {
         await unsubscribeFromPushNotifications();
         setIsPushEnabled(false);
-        setPushStatus("Push notifications disabled");
+        alert("Push notifications disabled");
       }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to update push notifications";
-      setPushStatus(message);
+      alert(message);
       setIsPushEnabled(!nextEnabled);
     } finally {
       setIsUpdatingPush(false);
     }
+  };
+
+  const handleOpenMenu = (event: MouseEvent<HTMLElement>) => {
+    setMenuAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseMenu = () => {
+    setMenuAnchorEl(null);
+  };
+
+  const handleNavigate = async (href: string) => {
+    handleCloseMenu();
+    await router.push(href);
+  };
+
+  const handleLogoutFromMenu = async () => {
+    handleCloseMenu();
+    await handleLogout();
   };
 
   return (
@@ -84,8 +111,9 @@ export default function Navbar() {
         <Typography
           variant="h6"
           component="div"
-          sx={{ flexGrow: 1, fontWeight: 700 }}
+          sx={{ flexGrow: 1, fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}
         >
+          <Image src="/icons/icon.png" alt="Sun Stock Analysis icon" width={20} height={20} />
           Sun Stock Analysis
         </Typography>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
@@ -98,32 +126,58 @@ export default function Navbar() {
                 disabled={isUpdatingPush}
               />
             }
-            label={isUpdatingPush ? "Updating..." : "Push"}
+            label={isUpdatingPush ? "Updating..." : isMobile ? "Noti" : "Push"}
             sx={{ mr: 0.5 }}
           />
-          {navItems.map((item) => (
-            <Button
-              key={item.href}
-              component={Link}
-              href={item.href}
-              color="inherit"
-              sx={{ textTransform: "none" }}
-            >
-              {item.label}
-            </Button>
-          ))}
-          <Button
-            color="inherit"
-            onClick={handleLogout}
-            sx={{ textTransform: "none" }}
-          >
-            Logout
-          </Button>
-          {pushStatus ? (
-            <Typography variant="caption" sx={{ color: "text.secondary", ml: 1 }}>
-              {pushStatus}
-            </Typography>
-          ) : null}
+          {isMobile ? (
+            <>
+              <IconButton
+                color="inherit"
+                aria-label="open menu"
+                aria-controls={isMenuOpen ? "navbar-menu" : undefined}
+                aria-haspopup="true"
+                aria-expanded={isMenuOpen ? "true" : undefined}
+                onClick={handleOpenMenu}
+                edge="end"
+              >
+                <MenuIcon />
+              </IconButton>
+              <Menu
+                id="navbar-menu"
+                anchorEl={menuAnchorEl}
+                open={isMenuOpen}
+                onClose={handleCloseMenu}
+              >
+                {navItems.map((item) => (
+                  <MenuItem key={item.href} onClick={() => void handleNavigate(item.href)}>
+                    {item.label}
+                  </MenuItem>
+                ))}
+                <MenuItem onClick={() => void handleLogoutFromMenu()}>Logout</MenuItem>
+              </Menu>
+            </>
+          ) : (
+            <>
+              {navItems.map((item) => (
+                <Button
+                  key={item.href}
+                  component={Link}
+                  href={item.href}
+                  color="inherit"
+                  sx={{ textTransform: "none" }}
+                >
+                  {item.label}
+                </Button>
+              ))}
+              <Button
+                color="inherit"
+                onClick={handleLogout}
+                sx={{ textTransform: "none" }}
+              >
+                Logout
+              </Button>
+            </>
+          )}
         </Box>
       </Toolbar>
     </AppBar>

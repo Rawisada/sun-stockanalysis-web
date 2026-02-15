@@ -9,6 +9,8 @@ import IconButton from "@mui/material/IconButton";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useRouter } from "next/router";
 import Box from "@mui/material/Box";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 
 type StockQuote = {
   id: string;
@@ -130,6 +132,8 @@ const isAlertForSymbol = (alert: AlertPayload, targetSymbol?: string) => {
 
 export default function StockDetailDailyPage() {
   const router = useRouter();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const symbol = Array.isArray(router.query.symbol)
     ? router.query.symbol[0]
     : router.query.symbol;
@@ -426,14 +430,19 @@ export default function StockDetailDailyPage() {
             </Typography>
           </Stack>
           <Stack
-            direction="row"
+            direction={isMobile ? "column" : "row"}
             spacing={3}
             alignItems="flex-start"
             sx={{ width: "100%", justifyContent: "space-between" }}
           >
             <Stack spacing={1} sx={{ flex: 1 }}>
               <Typography>Symbol: {symbol ?? "-"}</Typography>
-              <Stack direction="row" spacing={2} alignItems="center">
+              <Stack
+                direction="row"
+                spacing={2}
+                alignItems="center"
+                sx={{ flexWrap: "wrap", rowGap: 1 }}
+              >
                 <Typography variant="body2">
                   Latest Change Percent:{" "}
                   <strong>
@@ -461,7 +470,12 @@ export default function StockDetailDailyPage() {
                   </strong>
                 </Typography>
               </Stack>
-              <Stack direction="row" spacing={2} alignItems="center">
+              <Stack
+                direction="row"
+                spacing={2}
+                alignItems="center"
+                sx={{ flexWrap: "wrap", rowGap: 1 }}
+              >
                 <Typography variant="body2">
                   High:{" "}
                   <strong>
@@ -490,7 +504,8 @@ export default function StockDetailDailyPage() {
             </Stack>
             <Box
               sx={{
-                minWidth: 260,
+                width: isMobile ? "100%" : "auto",
+                minWidth: isMobile ? 0 : 260,
                 border: "1px solid",
                 borderColor: "divider",
                 borderRadius: 1,
