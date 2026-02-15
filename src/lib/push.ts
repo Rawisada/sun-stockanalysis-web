@@ -220,7 +220,7 @@ export const subscribeToPushNotifications = async () => {
     body: JSON.stringify({
       device_id: deviceId,
       subscription: toPushSubscriptionPayload(subscription),
-      userAgent: navigator.userAgent,
+      user_agent: navigator.userAgent,
     }),
   });
 
@@ -252,17 +252,20 @@ export const unsubscribeFromPushNotifications = async () => {
     throw new Error("Failed to unsubscribe from push notifications.");
   }
 
-  const response = await fetch(subscriptionApiPath, {
+  const query = new URLSearchParams({ device_id: deviceId }).toString();
+  const response = await fetch(`${subscriptionApiPath}?${query}`, {
     method: "DELETE",
     headers: {
       "Content-Type": "application/json",
       ...createAuthHeaders(),
     },
-    body: JSON.stringify({
-      device_id: deviceId,
-      endpoint: subscription.endpoint,
-    }),
   });
+
+  // Some backends expose only POST subscribe and no DELETE unsubscribe.
+  // In that case, local unsubscribe is enough and stale endpoints will fail server-side.
+  if (response.status === 404 || response.status === 405) {
+    return;
+  }
 
   if (!response.ok) {
     throw new Error(await parseApiErrorMessage(response));
