@@ -19,7 +19,7 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
 import {
   hasPushSubscription,
-  subscribeToPushNotifications,
+  resubscribeToPushNotifications,
   unsubscribeFromPushNotifications,
 } from "@/lib/push";
 
@@ -70,7 +70,7 @@ export default function Navbar() {
     setIsUpdatingPush(true);
     try {
       if (nextEnabled) {
-        await subscribeToPushNotifications();
+        await resubscribeToPushNotifications();
         setIsPushEnabled(true);
         alert("Push notifications enabled");
       } else {
