@@ -271,38 +271,3 @@ export const unsubscribeFromPushNotifications = async () => {
     throw new Error(await parseApiErrorMessage(response));
   }
 };
-
-export const resubscribeToPushNotifications = async () => {
-  if (!isPushSupported()) {
-    throw new Error("This browser does not support push notifications.");
-  }
-
-  const registrations = await navigator.serviceWorker.getRegistrations();
-  for (const registration of registrations) {
-    const subscription = await registration.pushManager.getSubscription();
-    if (subscription) {
-      await subscription.unsubscribe();
-    }
-  }
-
-  const deviceId = getOrCreateDeviceId();
-  const query = new URLSearchParams({ device_id: deviceId }).toString();
-  const deleteResponse = await fetch(`${subscriptionApiPath}?${query}`, {
-    method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      ...createAuthHeaders(),
-    },
-  });
-
-  // Some backends expose only POST subscribe and no DELETE unsubscribe.
-  if (
-    !deleteResponse.ok &&
-    deleteResponse.status !== 404 &&
-    deleteResponse.status !== 405
-  ) {
-    throw new Error(await parseApiErrorMessage(deleteResponse));
-  }
-
-  return subscribeToPushNotifications();
-};
