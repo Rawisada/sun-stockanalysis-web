@@ -131,6 +131,11 @@ const parseApiErrorMessage = async (response: Response) => {
 };
 
 const getVapidPublicKey = async () => {
+  const envKey = process.env.PUSH_VAPIDPUBLICKEY;
+  if (envKey) {
+    return envKey;
+  }
+
   const response = await fetch(vapidPublicKeyApiPath, {
     method: "GET",
     headers: {
