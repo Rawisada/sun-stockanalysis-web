@@ -135,20 +135,33 @@ export default function StockDetailNewsPage() {
                     </Typography>
                   </AccordionSummary>
                   <AccordionDetails>
-                    <Typography>symbol: {item.symbol}</Typography>
-                    <Typography sx={{ fontWeight: 700 }}>
+                    <Typography sx={{ wordBreak: "break-word", overflowWrap: "anywhere" }}>
+                      symbol: {item.symbol}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        wordBreak: "break-word",
+                        overflowWrap: "anywhere",
+                      }}
+                    >
                       summary: {item.summary}
                     </Typography>
-                    <Typography sx={{ color: "text.secondary" }}>
+                    <Typography sx={{ color: "text.secondary", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                       source: {item.source}
                     </Typography>
-                    <Typography sx={{ color: "text.secondary" }}>
+                    <Typography sx={{ color: "text.secondary", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                       url:{" "}
-                      <Link href={item.url} target="_blank" rel="noreferrer">
+                      <Link
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        sx={{ wordBreak: "break-word", overflowWrap: "anywhere" }}
+                      >
                         {item.url}
                       </Link>
                     </Typography>
-                    <Typography sx={{ color: "text.secondary" }}>
+                    <Typography sx={{ color: "text.secondary", wordBreak: "break-word", overflowWrap: "anywhere" }}>
                       data: {item.created_at.split(" ")[0]}
                     </Typography>
                   </AccordionDetails>

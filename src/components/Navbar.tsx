@@ -9,6 +9,7 @@ import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import MenuIcon from "@mui/icons-material/Menu";
+import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/router";
@@ -108,14 +109,29 @@ export default function Navbar() {
   return (
     <AppBar position="static" color="default" elevation={1}>
       <Toolbar sx={{ gap: 2 }}>
-        <Typography
-          variant="h6"
-          component="div"
-          sx={{ flexGrow: 1, fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}
-        >
-          <Image src="/icons/icon.png" alt="Sun Stock Analysis icon" width={20} height={20} />
-          Sun Stock Analysis
-        </Typography>
+        <Box sx={{ flexGrow: 1, display: "flex", alignItems: "center", gap: 2 }}>
+          <Typography
+            variant="h6"
+            component="div"
+            sx={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}
+          >
+            <Image src="/icons/icon.png" alt="Sun Stock Analysis icon" width={20} height={20} />
+            Sun Stock Analysis
+          </Typography>
+          {!isMobile
+            ? navItems.map((item) => (
+                <Button
+                  key={item.href}
+                  component={Link}
+                  href={item.href}
+                  color="inherit"
+                  sx={{ textTransform: "none" }}
+                >
+                  {item.label}
+                </Button>
+              ))
+            : null}
+        </Box>
         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
           <FormControlLabel
             control={
@@ -126,7 +142,7 @@ export default function Navbar() {
                 disabled={isUpdatingPush}
               />
             }
-            label={isUpdatingPush ? "Updating..." : isMobile ? "Noti" : "Push"}
+            label={isUpdatingPush ? "Updating..." : <NotificationsNoneIcon fontSize="small" />}
             sx={{ mr: 0.5 }}
           />
           {isMobile ? (
@@ -157,26 +173,13 @@ export default function Navbar() {
               </Menu>
             </>
           ) : (
-            <>
-              {navItems.map((item) => (
-                <Button
-                  key={item.href}
-                  component={Link}
-                  href={item.href}
-                  color="inherit"
-                  sx={{ textTransform: "none" }}
-                >
-                  {item.label}
-                </Button>
-              ))}
-              <Button
-                color="inherit"
-                onClick={handleLogout}
-                sx={{ textTransform: "none" }}
-              >
-                Logout
-              </Button>
-            </>
+            <Button
+              color="inherit"
+              onClick={handleLogout}
+              sx={{ textTransform: "none" }}
+            >
+              Logout
+            </Button>
           )}
         </Box>
       </Toolbar>
