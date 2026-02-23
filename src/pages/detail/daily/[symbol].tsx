@@ -562,7 +562,7 @@ export default function StockDetailDailyPage() {
                   <LineChart
                     height={360}
                     width={Math.max(1200, chartData.length * 18)}
-                    margin={{ right: 24 }}
+                    margin={{ right: 220 }}
                     series={[
                       {
                         data: chartData.map((item) => item.price),
